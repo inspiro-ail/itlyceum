@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Лицей-интернат "Информационные технологии" г. Караганда | Аналитика</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ── NAVIGATION ── -->
+<nav>
+  <div class="logo">
+    <img src="logo.png" alt="Лицей-интернат ИТ" class="logo-img">
+    <span>Лицей-интернат "ИТ" Караганда</span>
+  </div>
+  <button class="ntab on"  onclick="showPage('grades',this)">По классам</button>
+  <button class="ntab"     onclick="showPage('teachers',this)">По учителям (награды)</button>
+</nav>
+
+<!-- ══════════════════════════════════════════════════════
+     PAGE 1: GRADES — качество знаний по классам
+══════════════════════════════════════════════════════ -->
+<div class="page on" id="page-grades">
+  <div class="wrap">
+
+    <!-- SCHOOL HEADER BANNER -->
+    <div class="school-banner">
+      <div class="banner-content">
+        <h1>🎓 Лицей-интернат "Информационные технологии"</h1>
+        <p class="banner-subtitle">г. Караганда, Казахстан</p>
+        <p class="banner-description">Передовая образовательная школа, специализирующаяся на подготовке специалистов в области информационных технологий</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Качество знаний по классам</div>
+      <div class="panel-sub">Загрузите выгрузки с Билимала по каждому классу — анализ оценок, % качества, динамика по четвертям.</div>
+      <div class="drop" id="gr-drop">
+        <input type="file" id="gr-input" accept=".xls,.xlsx" multiple>
+        <div class="di">📂</div>
+        <h3>Перетащите файлы классов или нажмите</h3>
+        <p>.xls / .xlsx — выгрузки с Билимала</p>
+      </div>
+      <div class="pills" id="gr-pills"></div>
+      <button class="btn" id="gr-btn" style="margin-top:20px" disabled onclick="runGrades()">⚡ Анализировать</button>
+    </div>
+
+    <div id="gr-results" style="display:none">
+      <div class="itabs">
+        <button class="itab on" onclick="iswitch('gr','overview',this)">Обзор</button>
+        <button class="itab"    onclick="iswitch('gr','subjects',this)">По предметам</button>
+        <button class="itab"    onclick="iswitch('gr','dynamics',this)">Динамика</button>
+        <button class="itab"    onclick="iswitch('gr','problems',this)">Проблемы</button>
+        <button class="itab"    onclick="iswitch('gr','compare',this)">Сравнение</button>
+      </div>
+      <div class="ipane on" id="gr-overview"></div>
+      <div class="ipane"    id="gr-subjects"></div>
+      <div class="ipane"    id="gr-dynamics"></div>
+      <div class="ipane"    id="gr-problems"></div>
+      <div class="ipane"    id="gr-compare"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     PAGE 2: TEACHERS — аналитика по наградам
+══════════════════════════════════════════════════════ -->
+<div class="page" id="page-teachers">
+  <div class="wrap">
+
+    <!-- SCHOOL HEADER BANNER -->
+    <div class="school-banner">
+      <div class="banner-content">
+        <h1>🎓 Лицей-интернат "Информационные технологии"</h1>
+        <p class="banner-subtitle">г. Караганда, Казахстан</p>
+        <p class="banner-description">Передовая образовательная школа, специализирующаяся на подготовке специалистов в области информационных технологий</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Аналитика по учителям — Награды</div>
+      <div class="panel-sub">
+        Загрузите файл с наградами учителей (таблица: ФИО, стаж, грамоты, ведомственные награды и т.д.).<br>
+        Система автоматически разберёт таблицу и построит аналитику по каждому педагогу.
+      </div>
+      <div class="drop" id="aw-drop">
+        <input type="file" id="aw-input" accept=".xls,.xlsx">
+        <div class="di">🏅</div>
+        <h3>Перетащите файл наград или нажмите</h3>
+        <p>.xlsx — таблица наград педагогов</p>
+      </div>
+      <div class="pills" id="aw-pills"></div>
+      <button class="btn" id="aw-btn" style="margin-top:20px" disabled onclick="runAwards()">⚡ Построить аналитику</button>
+    </div>
+
+    <div id="aw-results" style="display:none">
+      <!-- Drilldown (single teacher detail) -->
+      <div id="aw-drill" style="display:none"></div>
+      <!-- Main tabs view -->
+      <div id="aw-main">
+        <div class="itabs">
+          <button class="itab on" onclick="iswitch('aw','overview',this)">Все учителя</button>
+          <button class="itab"    onclick="iswitch('aw','stats',this)">Статистика наград</button>
+          <button class="itab"    onclick="iswitch('aw','stazh',this)">По стажу</button>
+          <button class="itab"    onclick="iswitch('aw','top',this)">Топ по наградам</button>
+        </div>
+        <div class="ipane on" id="aw-overview"></div>
+        <div class="ipane"    id="aw-stats"></div>
+        <div class="ipane"    id="aw-stazh"></div>
+        <div class="ipane"    id="aw-top"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
