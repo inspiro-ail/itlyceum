@@ -22,9 +22,177 @@ const AWARD_COLS = [
 // ─── State ────────────────────────────────────────────────────
 const S = {
   gr: { files: [], parsed: [], charts: [] },
-  aw: { file: null, teachers: [], charts: [] }
+  aw: { file: null, teachers: [], charts: [] },
+  history: { gr: [], aw: [] }
 };
 const multi_ = { gr: true, aw: false };
+
+// ─── Storage Keys ────────────────────────────────────────────────
+const STORAGE_KEY_GR = 'school_analytics_grades_history';
+const STORAGE_KEY_AW = 'school_analytics_awards_history';
+const STORAGE_KEY_AW_DATA = 'school_analytics_awards_data';
+
+// ═══════════════════════════════════════════════════════
+//  STORAGE & HISTORY MANAGEMENT
+// ═══════════════════════════════════════════════════════
+function saveAwardsToStorage(teachers) {
+  try {
+    // Validate and clean teacher data
+    const cleanedTeachers = teachers.map(t => ({
+      num: t.num,
+      name: String(t.name || '').trim(),
+      stazh: Number(t.stazh) || 0,
+      stazh_org: Number(t.stazh_org) || 0,
+      awards: t.awards || {},
+      totalTypes: Number(t.totalTypes) || 0,
+      totalCount: Number(t.totalCount) || 0,
+      level: String(t.level || 'none')
+    }));
+    localStorage.setItem(STORAGE_KEY_AW_DATA, JSON.stringify({
+      data: cleanedTeachers,
+      timestamp: new Date().toISOString(),
+      version: 1
+    }));
+    return true;
+  } catch (e) {
+    console.error('Error saving to storage:', e);
+    return false;
+  }
+}
+
+function loadAwardsFromStorage() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_AW_DATA);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    // Validate data structure
+    if (parsed.data && Array.isArray(parsed.data)) {
+      return parsed.data;
+    }
+    return null;
+  } catch (e) {
+    console.error('Error loading from storage:', e);
+    return null;
+  }
+}
+
+function saveToHistory(ns, entry) {
+  try {
+    const key = ns === 'gr' ? STORAGE_KEY_GR : STORAGE_KEY_AW;
+    const history = JSON.parse(localStorage.getItem(key) || '[]');
+    history.unshift({
+      ...entry,
+      timestamp: new Date().toISOString(),
+      id: Math.random().toString(36).substr(2, 9)
+    });
+    // Keep last 10 entries
+    if (history.length > 10) history.pop();
+    localStorage.setItem(key, JSON.stringify(history));
+    S.history[ns] = history;
+    return history;
+  } catch (e) {
+    console.error('Error saving history:', e);
+    return [];
+  }
+}
+
+function loadHistoryFromStorage() {
+  try {
+    S.history.gr = JSON.parse(localStorage.getItem(STORAGE_KEY_GR) || '[]');
+    S.history.aw = JSON.parse(localStorage.getItem(STORAGE_KEY_AW) || '[]');
+  } catch (e) {
+    console.error('Error loading history:', e);
+    S.history.gr = [];
+    S.history.aw = [];
+  }
+}
+
+function clearStorage(ns) {
+  try {
+    if (ns === 'all') {
+      localStorage.removeItem(STORAGE_KEY_GR);
+      localStorage.removeItem(STORAGE_KEY_AW);
+      localStorage.removeItem(STORAGE_KEY_AW_DATA);
+      S.history.gr = [];
+      S.history.aw = [];
+      renderHistoryPanel('all');
+    } else {
+      const key = ns === 'gr' ? STORAGE_KEY_GR : STORAGE_KEY_AW;
+      localStorage.removeItem(key);
+      S.history[ns] = [];
+      renderHistoryPanel(ns);
+    }
+  } catch (e) {
+    console.error('Error clearing storage:', e);
+  }
+}
+
+function renderHistoryPanel(ns = 'all') {
+  if (ns === 'all' || ns === 'gr') {
+    const grHist = document.getElementById('gr-history');
+    if (grHist) {
+      if (S.history.gr.length === 0) {
+        grHist.innerHTML = '<div class="hist-empty">История пуста. Загрузите файлы и нажмите "Анализировать"</div>';
+      } else {
+        grHist.innerHTML = `<div class="hist-list">
+          ${S.history.gr.map((h, i) => `
+            <div class="hist-item" onclick="loadHistoryEntry('gr', ${i})">
+              <div class="hist-date">${new Date(h.timestamp).toLocaleString('ru-RU')}</div>
+              <div class="hist-files">📚 ${h.files.length} файл(ов)</div>
+            </div>`).join('')}
+        </div>
+        <button class="btn-small" onclick="clearStorage('gr')" style="margin-top:12px;width:100%;background:#f85149">Очистить историю</button>`;
+      }
+    }
+  }
+  
+  if (ns === 'all' || ns === 'aw') {
+    const awHist = document.getElementById('aw-history');
+    if (awHist) {
+      if (S.history.aw.length === 0) {
+        awHist.innerHTML = '<div class="hist-empty">История пуста. Загрузите файл с наградами и нажмите "Построить аналитику"</div>';
+      } else {
+        awHist.innerHTML = `<div class="hist-list">
+          ${S.history.aw.map((h, i) => `
+            <div class="hist-item" onclick="loadHistoryEntry('aw', ${i})">
+              <div class="hist-date">${new Date(h.timestamp).toLocaleString('ru-RU')}</div>
+              <div class="hist-files">🏅 ${h.fileName}</div>
+              <div class="hist-teachers">${h.teacherCount} педагогов</div>
+            </div>`).join('')}
+        </div>
+        <button class="btn-small" onclick="clearStorage('aw')" style="margin-top:12px;width:100%;background:#f85149">Очистить историю</button>`;
+      }
+    }
+  }
+}
+
+function loadHistoryEntry(ns, idx) {
+  const history = S.history[ns];
+  if (!history[idx]) return;
+  
+  const entry = history[idx];
+  if (ns === 'gr') {
+    S.gr.parsed = entry.parsed || [];
+    if (S.gr.parsed.length > 0) {
+      destroyCharts('gr');
+      grOverview(); grSubjects(); grDynamics(); grProblems(); grCompare();
+      renderHistoryPanel('gr');
+      document.getElementById('gr-results').style.display = 'block';
+      document.getElementById('gr-results').scrollIntoView({ behavior: 'smooth' });
+    }
+  } else {
+    S.aw.teachers = entry.teachers || [];
+    if (S.aw.teachers.length > 0) {
+      destroyCharts('aw');
+      awOverview(); awStats(); awStazh(); awTop();
+      renderHistoryPanel('aw');
+      document.getElementById('aw-results').style.display = 'block';
+      document.getElementById('aw-main').style.display = 'block';
+      document.getElementById('aw-drill').style.display = 'none';
+      document.getElementById('aw-results').scrollIntoView({ behavior: 'smooth' });
+    }
+  }
+}
 
 // ═══════════════════════════════════════════════════════
 //  NAV
@@ -187,6 +355,15 @@ function runGrades() {
   S.gr.parsed.forEach(p => { p.stats = calcGradeStats(p.rows, p.subjects); });
   destroyCharts('gr');
   grOverview(); grSubjects(); grDynamics(); grProblems(); grCompare();
+  
+  // Save to history
+  saveToHistory('gr', {
+    files: S.gr.files.map(f => ({ name: f.name })),
+    parsed: S.gr.parsed
+  });
+  
+  renderHistoryPanel('gr');
+  
   document.getElementById('gr-results').style.display = 'block';
   document.getElementById('gr-results').scrollIntoView({ behavior: 'smooth' });
 }
@@ -373,6 +550,19 @@ function parseAwardsFile(buffer) {
 function runAwards() {
   if (!S.aw.file) return;
   S.aw.teachers = parseAwardsFile(S.aw.file.data);
+  
+  // Validate and save teacher data
+  saveAwardsToStorage(S.aw.teachers);
+  
+  // Save to history
+  saveToHistory('aw', {
+    fileName: S.aw.file.name,
+    teachers: S.aw.teachers,
+    teacherCount: S.aw.teachers.length
+  });
+  
+  renderHistoryPanel('aw');
+  
   destroyCharts('aw');
   awOverview(); awStats(); awStazh(); awTop();
   document.getElementById('aw-results').style.display = 'block';
@@ -561,12 +751,100 @@ function awDrill(idx) {
 function awBack() {
   destroyCharts('aw');
   awOverview(); awStats(); awStazh(); awTop();
+  renderHistoryPanel('aw');
   document.getElementById('aw-drill').style.display = 'none';
   document.getElementById('aw-main').style.display  = 'block';
 }
 
 // ═══════════════════════════════════════════════════════
+//  EXPORT & BACKUP
+// ═══════════════════════════════════════════════════════
+function exportTeacherData() {
+  if (!S.aw.teachers || S.aw.teachers.length === 0) {
+    alert('Нет данных для экспорта');
+    return;
+  }
+  
+  const exportData = S.aw.teachers.map(t => ({
+    '№': t.num,
+    'ФИО': t.name,
+    'Общий стаж (лет)': t.stazh,
+    'Стаж в организации (лет)': t.stazh_org,
+    'Типов наград': t.totalTypes,
+    'Всего грамот/знаков': t.totalCount,
+    'Высшая награда': t.level,
+    ...Object.fromEntries(AWARD_COLS.map(ac => [ac.label, t.awards[ac.key] || '']))
+  }));
+  
+  const ws = XLSX.utils.json_to_sheet(exportData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Награды');
+  
+  // Auto-adjust column widths
+  const colWidths = {};
+  Object.keys(exportData[0] || {}).forEach((key, idx) => {
+    colWidths[String.fromCharCode(65 + idx)] = { wch: Math.max(15, key.length + 2) };
+  });
+  ws['!cols'] = Object.values(colWidths);
+  
+  const timestamp = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, `teachers_export_${timestamp}.xlsx`);
+}
+
+function exportGradesData() {
+  if (!S.gr.parsed || S.gr.parsed.length === 0) {
+    alert('Нет данных для экспорта');
+    return;
+  }
+  
+  const wb = XLSX.utils.book_new();
+  
+  S.gr.parsed.forEach(cls => {
+    const data = [];
+    cls.rows.forEach(row => {
+      const rowData = { 'Ученик': row.student, 'Период': row.quarter };
+      cls.subjects.forEach(s => {
+        rowData[s] = isNaN(row[s]) ? '' : row[s];
+      });
+      data.push(rowData);
+    });
+    
+    const ws = XLSX.utils.json_to_sheet(data);
+    const colWidths = {};
+    Object.keys(data[0] || {}).forEach((key, idx) => {
+      colWidths[String.fromCharCode(65 + idx)] = { wch: Math.max(15, key.length + 2) };
+    });
+    ws['!cols'] = Object.values(colWidths);
+    
+    XLSX.utils.book_append_sheet(wb, ws, cls.name.slice(0, 31));
+  });
+  
+  const timestamp = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, `grades_export_${timestamp}.xlsx`);
+}
+
+// ═══════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════
-setupDrop('gr');
-setupDrop('aw');
+function initializeApp() {
+  setupDrop('gr');
+  setupDrop('aw');
+  loadHistoryFromStorage();
+  renderHistoryPanel('all');
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeApp);
+} else {
+  // DOM is already ready
+  initializeApp();
+}
+
+// Load previously saved awards data if available
+window.addEventListener('load', () => {
+  const savedTeachers = loadAwardsFromStorage();
+  if (savedTeachers && savedTeachers.length > 0) {
+    S.aw.teachers = savedTeachers;
+  }
+});
