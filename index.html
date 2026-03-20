@@ -48,6 +48,12 @@
       <button class="btn" id="gr-btn" style="margin-top:20px" disabled onclick="runGrades()">⚡ Анализировать</button>
     </div>
 
+    <div class="panel" style="margin-top:30px;background:rgba(63, 185, 80, 0.08);border-left:4px solid #3fb950">
+      <div class="panel-title">📚 История анализа</div>
+      <div id="gr-history"></div>
+      <button class="btn-small" onclick="exportGradesData()" style="margin-top:12px;width:100%;background:rgba(63, 185, 80, 0.2);border-color:#3fb950;color:#34d399">📥 Экспортировать результаты</button>
+    </div>
+
     <div id="gr-results" style="display:none">
       <div class="itabs">
         <button class="itab on" onclick="iswitch('gr','overview',this)">Обзор</button>
@@ -95,6 +101,12 @@
       </div>
       <div class="pills" id="aw-pills"></div>
       <button class="btn" id="aw-btn" style="margin-top:20px" disabled onclick="runAwards()">⚡ Построить аналитику</button>
+    </div>
+
+    <div class="panel" style="margin-top:30px;background:rgba(255, 215, 0, 0.08);border-left:4px solid #ffd700">
+      <div class="panel-title">🏅 История данных по наградам</div>
+      <div id="aw-history"></div>
+      <button class="btn-small" onclick="exportTeacherData()" style="margin-top:12px;width:100%;background:rgba(255, 215, 0, 0.2);border-color:#ffd700;color:#fcd34d">📥 Экспортировать данные</button>
     </div>
 
     <div id="aw-results" style="display:none">
