@@ -11,7 +11,7 @@ const AWARD_COLS = [
   { key:'daryn',  label:'РНПЦ Дарын',               cls:'aw-daryn',  col:8  },
   { key:'sardar', label:'Сарыарқа дарыны',          cls:'aw-sar',    col:9  },
   { key:'obl_q',  label:'Алғыс хаты ГОРОНО',       cls:'aw-oblq',   col:10 },
-  { key:'obl_g',  label:'Почётная грамота ГОРОНО',  cls:'aw-oblg',   col:11 },
+  { key:'obl_g',  label:'Почетная грамота управления образования',  cls:'aw-oblg',   col:11 },
   { key:'min_q',  label:'Алғыс хаты Министерства', cls:'aw-minq',   col:12 },
   { key:'min_g',  label:'Почётная грамота МОН',     cls:'aw-ming',   col:13 },
   { key:'znak1',  label:'Нагр. знак Алтынсарин',    cls:'aw-znak1',  col:14 },
@@ -23,9 +23,11 @@ const AWARD_COLS = [
 const S = {
   gr: { files: [], parsed: [], charts: [] },
   aw: { file: null, teachers: [], charts: [] },
+  rt: { teacherFile: null, studentFile: null, teachers: [], students: [], charts: [] },
+  rs: { teacherFile: null, studentFile: null, teachers: [], students: [], charts: [] },
   history: { gr: [], aw: [] }
 };
-const multi_ = { gr: true, aw: false };
+const multi_ = { gr: true, aw: false, rt: false, rs: false };
 
 // ─── Storage Keys ────────────────────────────────────────────────
 const STORAGE_KEY_GR = 'school_analytics_grades_history';
@@ -205,7 +207,7 @@ function showPage(id, btn) {
 }
 
 function iswitch(ns, pane, btn) {
-  const root = ns === 'gr' ? 'gr-results' : ns === 'aw' ? 'aw-main' : '';
+  const root = ns === 'gr' ? 'gr-results' : ns === 'aw' ? 'aw-main' : ns === 'rt' ? 'rt-results' : '';
   document.querySelectorAll(`#${root} .ipane`).forEach(p => p.classList.remove('on'));
   document.querySelectorAll(`#${root} .itab`).forEach(b => b.classList.remove('on'));
   document.getElementById(`${ns}-${pane}`).classList.add('on');
@@ -226,11 +228,11 @@ function setupDrop(ns) {
 
 function addFiles(ns, files) {
   files.forEach(f => {
-    if (!multi_[ns] && S[ns].files && S[ns].files.find(x => x.name === f.name)) return;
+    if (!multi_[ns] && S[ns].file && S[ns].file.name === f.name) return;
     const reader = new FileReader();
     reader.onload = e => {
-      if (ns === 'aw') {
-        S.aw.file = { name: f.name, data: e.target.result };
+      if (ns === 'aw' || ns === 'rt' || ns === 'rs') {
+        S[ns].file = { name: f.name, data: e.target.result };
       } else {
         S[ns].files.push({ name: f.name, data: e.target.result });
       }
@@ -242,9 +244,9 @@ function addFiles(ns, files) {
 }
 
 function removeFile(ns, name) {
-  if (ns === 'aw') {
-    S.aw.file = null;
-    document.getElementById('aw-btn').disabled = true;
+  if (ns === 'aw' || ns === 'rt' || ns === 'rs') {
+    S[ns].file = null;
+    document.getElementById(`${ns}-btn`).disabled = true;
   } else {
     S[ns].files = S[ns].files.filter(f => f.name !== name);
     document.getElementById(`${ns}-btn`).disabled = S[ns].files.length === 0;
@@ -253,7 +255,7 @@ function removeFile(ns, name) {
 }
 
 function renderPills(ns) {
-  const files = ns === 'aw' ? (S.aw.file ? [S.aw.file] : []) : S[ns].files;
+  const files = (ns === 'aw' || ns === 'rt' || ns === 'rs') ? (S[ns].file ? [S[ns].file] : []) : S[ns].files;
   document.getElementById(`${ns}-pills`).innerHTML = files.map(f =>
     `<div class="pill"><span>📄 ${f.name}</span><span class="x" onclick="removeFile('${ns}','${f.name.replace(/'/g, "\\'")}')">×</span></div>`
   ).join('');
@@ -824,11 +826,457 @@ function exportGradesData() {
 }
 
 // ═══════════════════════════════════════════════════════
+//  RATINGS — parse and render (from files(2), exact implementation)
+// ═══════════════════════════════════════════════════════
+
+// Set up drop handlers for ratings (teachers and students separately)
+function setupRatingDrops() {
+  // Teachers ratings
+  const rtDrop = document.getElementById('rt-drop');
+  const rtInput = document.getElementById('rt-input');
+  if (rtDrop && rtInput) {
+    rtDrop.addEventListener('dragover', e => { e.preventDefault(); rtDrop.classList.add('over'); });
+    rtDrop.addEventListener('dragleave', () => rtDrop.classList.remove('over'));
+    rtDrop.addEventListener('drop', e => { 
+      e.preventDefault(); 
+      rtDrop.classList.remove('over'); 
+      if (e.dataTransfer.files.length > 0) loadRatingFile('rt', e.dataTransfer.files[0]); 
+    });
+    rtInput.addEventListener('change', () => { if (rtInput.files.length > 0) loadRatingFile('rt', rtInput.files[0]); });
+  }
+  
+  // Students ratings
+  const rsDrop = document.getElementById('rs-drop');
+  const rsInput = document.getElementById('rs-input');
+  if (rsDrop && rsInput) {
+    rsDrop.addEventListener('dragover', e => { e.preventDefault(); rsDrop.classList.add('over'); });
+    rsDrop.addEventListener('dragleave', () => rsDrop.classList.remove('over'));
+    rsDrop.addEventListener('drop', e => { 
+      e.preventDefault(); 
+      rsDrop.classList.remove('over'); 
+      if (e.dataTransfer.files.length > 0) loadRatingFile('rs', e.dataTransfer.files[0]); 
+    });
+    rsInput.addEventListener('change', () => { if (rsInput.files.length > 0) loadRatingFile('rs', rsInput.files[0]); });
+  }
+}
+
+// Load and parse rating file (teachers or students)
+function loadRatingFile(ns, file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    if (ns === 'rt') {
+      S.rt.teacherFile = { name: file.name, data: e.target.result };
+      S.rt.teachers = parseTeacherRatings(e.target.result);
+      document.getElementById('rt-pills').innerHTML = `📊 ${file.name}`;
+      document.getElementById('rt-btn').disabled = false;
+    } else {
+      S.rt.studentFile = { name: file.name, data: e.target.result };
+      S.rt.students = parseStudentRatings(e.target.result);
+      document.getElementById('rs-pills').innerHTML = `📊 ${file.name}`;
+      document.getElementById('rs-btn').disabled = false;
+    }
+    updateStudentSelect();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// Parse teacher ratings from Excel
+function parseTeacherRatings(buffer) {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+  
+  const teachers = [];
+  const cyrillic = /[А-ЯЁа-яёA-Za-z]/;
+  
+  raw.forEach((row, idx) => {
+    // Column 34 = name
+    if (!row[34] || !cyrillic.test(String(row[34]))) return;
+    const name = String(row[34]).trim();
+    
+    // Extract quarter scores and total from columns 35-38
+    const q1    = parseFloat(row[35]) || 0;
+    const q2    = parseFloat(row[36]) || 0;
+    const q34   = parseFloat(row[37]) || 0;
+    const total = parseFloat(row[38]) || 0;
+    
+    // Extract criteria from columns 2-31
+    const criteria = {};
+    for (let i = 2; i <= 31; i++) {
+      const val = row[i];
+      if (val !== null && val !== undefined && val !== '') {
+        const header = raw[0] && raw[0][i] ? String(raw[0][i]).trim() : `Критерий ${i-1}`;
+        criteria[header] = parseFloat(val) || 0;
+      }
+    }
+    
+    teachers.push({ name, q1, q2, q34, total, criteria });
+  });
+  
+  return teachers.sort((a, b) => b.total - a.total);
+}
+
+// Parse student ratings from Excel
+function parseStudentRatings(buffer) {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+  
+  if (!raw.length) return [];
+  
+  const students = [];
+  const headers = raw[0] || [];
+  
+  // Process rows starting from 1 (row 0 is headers)
+  for (let i = 1; i < raw.length; i++) {
+    const row = raw[i];
+    
+    // Name from column 1 or 81
+    let name = (row[1] ? String(row[1]).trim() : '') || (row[81] ? String(row[81]).trim() : '');
+    if (!name) continue;
+    
+    // Total from column 80
+    const total = parseFloat(row[80]) || 0;
+    
+    // Criteria scores from columns 2-79
+    const scores = [];
+    for (let j = 2; j <= 79; j++) {
+      if (row[j] !== null && row[j] !== undefined && row[j] !== '') {
+        const label = headers[j] ? String(headers[j]).trim() : `Критерий ${j-1}`;
+        const value = parseFloat(row[j]) || 0;
+        scores.push({ label, value });
+      }
+    }
+    
+    students.push({ name, total, scores, idx: students.length });
+  }
+  
+  // Sort by total descending
+  students.sort((a, b) => b.total - a.total);
+  
+  // Update indices after sorting
+  students.forEach((s, i) => s.rank = i + 1);
+  
+  return students;
+}
+
+// Update student select dropdown
+function updateStudentSelect() {
+  const sel = document.getElementById('student-select');
+  if (!sel) return;
+  
+  sel.innerHTML = '<option value="">— выберите ученика —</option>';
+  S.rt.students.forEach((student, idx) => {
+    const opt = document.createElement('option');
+    opt.value = idx;
+    opt.textContent = `${student.name} (${student.total} баллов)`;
+    sel.appendChild(opt);
+  });
+}
+
+// Run teacher ratings analysis
+function runTeacherRatings() {
+  if (!S.rt.teacherFile) return;
+  
+  destroyCharts('rt');
+  renderTeacherRating();
+  
+  document.getElementById('rt-results').style.display = 'block';
+  document.getElementById('rt-teachers').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Run student ratings analysis
+function runStudentRatings() {
+  if (!S.rt.studentFile) return;
+  
+  destroyCharts('rt');
+  renderStudentRating();
+  
+  document.getElementById('rt-results').style.display = 'block';
+  iswitch('rt', 'students', document.querySelector('#rt-results .itab:nth-child(2)'));
+  document.getElementById('rt-students').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Render teacher ratings
+function renderTeacherRating() {
+  const root = document.getElementById('rt-teachers');
+  if (!root || !S.rt.teachers.length) {
+    if (root) root.innerHTML = '<p>Нет данных учителей</p>';
+    return;
+  }
+  
+  let html = `<div class="stitle">Рейтинг учителей</div>
+    <div class="cards">
+      <div class="card">
+        <div class="lbl">Всего педагогов</div>
+        <div class="val">${S.rt.teachers.length}</div>
+      </div>
+      <div class="card">
+        <div class="lbl">Лидер</div>
+        <div class="val">${S.rt.teachers[0].name}</div>
+      </div>
+      <div class="card">
+        <div class="lbl">Средний балл</div>
+        <div class="val">${(S.rt.teachers.reduce((s, t) => s + t.total, 0) / S.rt.teachers.length).toFixed(1)}</div>
+      </div>
+    </div>`;
+  
+  // Create chart container
+  const chartId = 'chart-teachers-' + Math.random().toString(36).substr(2, 9);
+  html += `<div style="margin-top:24px;padding:16px;background:var(--sur);border-radius:8px">
+    <canvas id="${chartId}" height="100"></canvas>
+  </div>`;
+  
+  // Table with rankings
+  html += `<div class="stitle" style="margin-top:24px">Таблица рейтинговfb</div>
+    <div class="tbl-wrap"><table class="dt"><thead><tr>
+      <th style="width:60px">Ме<span>сто</span></th>
+      <th>ФИО</th>
+      <th style="width:80px">I четв.</th>
+      <th style="width:80px">II четв.</th>
+      <th style="width:80px">III-IV четв.</th>
+      <th style="width:100px">Итого</th>
+      <th style="width:160px">Диаграмма</th>
+    </tr></thead><tbody>`;
+  
+  S.rt.teachers.forEach((teacher, idx) => {
+    const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1;
+    const pct = Math.min(100, (teacher.total / 100) * 100);
+    const barColor = pct >= 70 ? 'var(--blu)' : pct >= 40 ? 'var(--yel)' : 'var(--red)';
+    
+    html += `<tr>
+      <td class="tal">${medal}</td>
+      <td>${teacher.name}</td>
+      <td class="tal">${teacher.q1.toFixed(1)}</td>
+      <td class="tal">${teacher.q2.toFixed(1)}</td>
+      <td class="tal">${teacher.q34.toFixed(1)}</td>
+      <td style="color:var(--acc);font-weight:bold" class="tal">${teacher.total.toFixed(1)}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="qbar" style="height:8px;background:var(--brd);border-radius:4px;flex:1;overflow:hidden">
+            <div class="qfill" style="height:100%;width:${pct}%;background:${barColor};border-radius:4px"></div>
+          </div>
+          <div style="font-size:12px;color:var(--txt);min-width:30px">${pct.toFixed(0)}%</div>
+        </div>
+      </td>
+    </tr>`;
+  });
+  
+  html += `</tbody></table></div>`;
+  root.innerHTML = html;
+  
+  // Render chart
+  setTimeout(() => {
+    const ctx = document.getElementById(chartId);
+    if (ctx) {
+      const topN = S.rt.teachers.slice(0, 10);
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: topN.map(t => t.name),
+          datasets: [{
+            label: 'Баллы',
+            data: topN.map(t => t.total),
+            backgroundColor: topN.map((_, i) => PAL[i % PAL.length]),
+            borderRadius: 4,
+            indexAxis: 'y'
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { x: { beginAtZero: true } }
+        }
+      });
+      S.rt.charts.push(ctx.chart);
+    }
+  }, 0);
+}
+
+// Render student ratings
+function renderStudentRating() {
+  const root = document.getElementById('rt-students');
+  if (!root || !S.rt.students.length) {
+    if (root) root.innerHTML = '<p>Нет данных учеников</p>';
+    return;
+  }
+  
+  let html = `<div class="stitle">Рейтинг учеников</div>
+    <div class="cards">
+      <div class="card">
+        <div class="lbl">Всего учеников</div>
+        <div class="val">${S.rt.students.length}</div>
+      </div>
+      <div class="card">
+        <div class="lbl">Лидер</div>
+        <div class="val">${S.rt.students[0].name}</div>
+      </div>
+      <div class="card">
+        <div class="lbl">Средний балл</div>
+        <div class="val">${(S.rt.students.reduce((s, st) => s + st.total, 0) / S.rt.students.length).toFixed(1)}</div>
+      </div>
+    </div>`;
+  
+  html += `<div class="stitle" style="margin-top:24px">Таблица рейтинг</div>
+    <div class="tbl-wrap"><table class="dt"><thead><tr>
+      <th style="width:60px">Место</th>
+      <th>ФИО</th>
+      <th style="width:100px">Баллы</th>
+    </tr></thead><tbody>`;
+  
+  S.rt.students.forEach((student, idx) => {
+    const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1;
+    html += `<tr onclick="selectStudentAndSwitch(${idx})" style="cursor:pointer">
+      <td>${medal}</td>
+      <td>${student.name}</td>
+      <td class="tal" style="color:var(--acc);font-weight:bold">${student.total.toFixed(1)}</td>
+    </tr>`;
+  });
+  
+  html += `</tbody></table></div>`;
+  root.innerHTML = html;
+}
+
+// Select student and switch to detail tab
+function selectStudentAndSwitch(idx) {
+  const sel = document.getElementById('student-select');
+  if (sel) sel.value = idx;
+  iswitch('rt', 'student-card', document.querySelector('#rt-results .itab:nth-child(3)'));
+  showStudentCard(String(idx));
+}
+
+// Show detailed student card
+function showStudentCard(idxStr) {
+  const root = document.getElementById('student-card-body');
+  if (!root) return;
+  
+  if (idxStr === '' || idxStr === undefined) {
+    root.innerHTML = '';
+    return;
+  }
+  
+  const idx = parseInt(idxStr);
+  const student = S.rt.students[idx];
+  if (!student) return;
+  
+  let html = `
+    <div class="stitle">${student.name}</div>
+    <div class="cards">
+      <div class="card">
+        <div class="lbl">Общий балл</div>
+        <div class="val" style="color:var(--acc)">${student.total.toFixed(1)}</div>
+      </div>
+      <div class="card">
+        <div class="lbl">Позиция</div>
+        <div class="val">${student.rank} из ${S.rt.students.length}</div>
+      </div>
+  `;
+  
+  // Calculate bonus and penalties
+  let bonusSum = 0, penaltySum = 0;
+  const bonusItems = [], penaltyItems = [];
+  
+  student.scores.forEach(score => {
+    if (score.value > 0) {
+      bonusSum += score.value;
+      bonusItems.push(score);
+    } else if (score.value < 0) {
+      penaltySum += Math.abs(score.value);
+      penaltyItems.push(score);
+    }
+  });
+  
+  html += `
+      <div class="card">
+        <div class="lbl">Бонусы</div>
+        <div class="val" style="color:var(--blu)">${bonusSum.toFixed(1)}</div>
+      </div>
+      <div class="card">
+        <div class="lbl">Штрафы</div>
+        <div class="val" style="color:var(--red)">${penaltySum.toFixed(1)}</div>
+      </div>
+    </div>
+  `;
+  
+  // Progress bar
+  const pct = Math.min(100, (student.total / 100) * 100);
+  html += `
+    <div style="margin-top:20px">
+      <div class="lbl" style="margin-bottom:8px">Прогресс</div>
+      <div class="qbar" style="height:16px;background:var(--brd);border-radius:8px;overflow:hidden">
+        <div class="qfill" style="height:100%;width:${pct}%;background:var(--acc);border-radius:8px;transition:width 0.3s"></div>
+      </div>
+      <div style="text-align:right;margin-top:4px;font-size:12px;color:var(--txt);opacity:0.7">${pct.toFixed(1)}%</div>
+    </div>
+  `;
+  
+  // Bonuses and penalties breakdown
+  html += `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px">
+      <div>
+        <div class="lbl" style="margin-bottom:8px;color:var(--blu)">Бонусы (${bonusItems.length})</div>
+        <div class="cgrid" style="max-height:200px;overflow-y:auto">
+  `;
+  
+  bonusItems.forEach(item => {
+    html += `
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--brd);font-size:13px">
+            <span>${item.label}</span>
+            <span style="color:var(--blu);font-weight:bold">+${item.value.toFixed(1)}</span>
+          </div>
+    `;
+  });
+  
+  html += `
+        </div>
+      </div>
+      <div>
+        <div class="lbl" style="margin-bottom:8px;color:var(--red)">Штрафы (${penaltyItems.length})</div>
+        <div class="cgrid" style="max-height:200px;overflow-y:auto">
+  `;
+  
+  penaltyItems.forEach(item => {
+    html += `
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--brd);font-size:13px">
+            <span>${item.label}</span>
+            <span style="color:var(--red);font-weight:bold">${item.value.toFixed(1)}</span>
+          </div>
+    `;
+  });
+  
+  html += `
+        </div>
+      </div>
+    </div>
+  `;
+  
+  root.innerHTML = html;
+}
+
+// Override iswitch for rt namespace to use correct root
+const originalIswitch = iswitch;
+function iswitch(ns, pane, btn) {
+  if (ns === 'rt') {
+    const root = 'rt-results';
+    document.querySelectorAll(`#${root} .ipane`).forEach(p => p.classList.remove('on'));
+    document.querySelectorAll(`#${root} .itab`).forEach(b => b.classList.remove('on'));
+    const paneEl = document.getElementById(`${ns}-${pane}`);
+    if (paneEl) paneEl.classList.add('on');
+    if (btn) btn.classList.add('on');
+  } else {
+    originalIswitch(ns, pane, btn);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════
 function initializeApp() {
   setupDrop('gr');
   setupDrop('aw');
+  setupRatingDrops();
   loadHistoryFromStorage();
   renderHistoryPanel('all');
 }
