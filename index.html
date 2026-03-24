@@ -18,6 +18,7 @@
   </div>
   <button class="ntab on"  onclick="showPage('grades',this)">По классам</button>
   <button class="ntab"     onclick="showPage('teachers',this)">По учителям (награды)</button>
+  <button class="ntab"     onclick="showPage('ratings',this)">Рейтинги</button>
 </nav>
 
 <!-- ══════════════════════════════════════════════════════
@@ -124,6 +125,64 @@
         <div class="ipane"    id="aw-stats"></div>
         <div class="ipane"    id="aw-stazh"></div>
         <div class="ipane"    id="aw-top"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     PAGE 3: RATINGS — рейтинг учителей и учеников
+══════════════════════════════════════════════════════ -->
+<div class="page" id="page-ratings">
+  <div class="wrap">
+
+    <!-- Teacher rating upload -->
+    <div class="panel">
+      <div class="panel-title">Рейтинг учителей</div>
+      <div class="panel-sub">Загрузите файл рейтинга учителей — таблица с баллами по критериям за каждую четверть.</div>
+      <div class="drop" id="rt-drop">
+        <input type="file" id="rt-input" accept=".xls,.xlsx">
+        <div class="di">👨‍🏫</div>
+        <h3>Перетащите файл рейтинга учителей</h3>
+        <p>.xlsx — таблица рейтинга учителей</p>
+      </div>
+      <div class="pills" id="rt-pills"></div>
+      <button class="btn" id="rt-btn" style="margin-top:20px" disabled onclick="runTeacherRatings()">⚡ Построить рейтинг учителей</button>
+    </div>
+
+    <!-- Student rating upload -->
+    <div class="panel">
+      <div class="panel-title">Рейтинг учеников</div>
+      <div class="panel-sub">Загрузите файл рейтинга учеников — таблица с баллами по критериям.</div>
+      <div class="drop" id="rs-drop">
+        <input type="file" id="rs-input" accept=".xls,.xlsx">
+        <div class="di">🎓</div>
+        <h3>Перетащите файл рейтинга учеников</h3>
+        <p>.xlsx — таблица рейтинга класса</p>
+      </div>
+      <div class="pills" id="rs-pills"></div>
+      <button class="btn" id="rs-btn" style="margin-top:20px" disabled onclick="runStudentRatings()">⚡ Построить рейтинг учеников</button>
+    </div>
+
+    <!-- Results -->
+    <div id="rt-results" style="display:none">
+      <div class="itabs">
+        <button class="itab on" onclick="iswitch('rt','teachers',this)">Рейтинг учителей</button>
+        <button class="itab"    onclick="iswitch('rt','students',this)">Рейтинг учеников</button>
+        <button class="itab"    onclick="iswitch('rt','student-card',this)">Карточка ученика</button>
+      </div>
+      <div class="ipane on" id="rt-teachers"></div>
+      <div class="ipane"    id="rt-students"></div>
+      <div class="ipane"    id="rt-student-card">
+        <div class="stitle">Выберите ученика</div>
+        <div style="max-width:380px;margin-bottom:24px">
+          <label style="display:block;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Ученик</label>
+          <select id="student-select" class="sel" onchange="showStudentCard(this.value)">
+            <option value="">— сначала загрузите файл учеников —</option>
+          </select>
+        </div>
+        <div id="student-card-body"></div>
       </div>
     </div>
 
