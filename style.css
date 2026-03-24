@@ -638,6 +638,36 @@ table.dt tr:last-child td { border-bottom: none; }
   transform: scale(0.98);
 }
 
+/* ── SELECT DROPDOWN ── */
+.sel {
+  background: var(--sur);
+  border: 1px solid var(--brd);
+  border-radius: 10px;
+  color: var(--txt);
+  font-family: 'Golos Text', sans-serif;
+  font-size: 14px;
+  padding: 12px 14px;
+  outline: none;
+  transition: all 0.3s ease;
+  width: 100%;
+  cursor: pointer;
+}
+
+.sel:hover {
+  border-color: var(--yel);
+  box-shadow: 0 4px 12px rgba(0, 128, 255, 0.15);
+}
+
+.sel:focus {
+  border-color: var(--acc);
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.3);
+}
+
+.sel option {
+  background: var(--sur);
+  color: var(--txt);
+}
+
 /* ── RESPONSIVE ── */
 @media (max-width: 860px) {
   nav { padding: 0 12px; }
